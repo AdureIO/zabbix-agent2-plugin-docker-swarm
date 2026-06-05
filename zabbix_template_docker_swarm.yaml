@@ -1,6 +1,5 @@
 zabbix_export:
   version: '7.4'
-  date: '2026-01-01T00:00:00Z'
   templates:
     - uuid: a1b2c3d4-e5f6-7890-abcd-ef1234567890
       template: 'Docker Swarm'
@@ -22,6 +21,7 @@ zabbix_export:
         - uuid: b1000001-0000-0000-0000-000000000001
           name: 'Docker Swarm Service Discovery'
           key: 'swarm.services.discovery'
+          type: ZABBIX_ACTIVE
           delay: 5m
           lifetime: 1d
           lifetime_type: DELETE_AFTER
@@ -30,6 +30,7 @@ zabbix_export:
             - uuid: c1000001-0000-0000-0000-000000000001
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): desired replicas'
               key: 'swarm.service.replicas_desired[{#SERVICE.KEY}]'
+              type: ZABBIX_ACTIVE
               delay: 60s
               value_type: UNSIGNED
               description: >
@@ -40,12 +41,14 @@ zabbix_export:
             - uuid: c1000002-0000-0000-0000-000000000001
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): running replicas'
               key: 'swarm.service.replicas_running[{#SERVICE.KEY}]'
+              type: ZABBIX_ACTIVE
               delay: 60s
               value_type: UNSIGNED
 
             - uuid: c1000003-0000-0000-0000-000000000001
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): failed task count'
               key: 'swarm.service.restarts[{#SERVICE.KEY}]'
+              type: ZABBIX_ACTIVE
               delay: 60s
               value_type: UNSIGNED
               description: >
@@ -56,6 +59,7 @@ zabbix_export:
             - uuid: c1000004-0000-0000-0000-000000000001
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): last task start timestamp'
               key: 'swarm.service.last_restart[{#SERVICE.KEY}]'
+              type: ZABBIX_ACTIVE
               delay: 60s
               value_type: UNSIGNED
               units: unixtime
@@ -123,6 +127,7 @@ zabbix_export:
         - uuid: b1000002-0000-0000-0000-000000000001
           name: 'Docker Compose Stack Discovery'
           key: 'swarm.stacks.discovery'
+          type: ZABBIX_ACTIVE
           delay: 10m
           lifetime: 1d
           lifetime_type: DELETE_AFTER
@@ -131,6 +136,7 @@ zabbix_export:
             - uuid: c2000001-0000-0000-0000-000000000001
               name: 'Stack {#STACK.NAME}: health status'
               key: 'swarm.stack.health[{#STACK.NAME}]'
+              type: ZABBIX_ACTIVE
               delay: 60s
               value_type: TEXT
               description: >
@@ -192,6 +198,7 @@ zabbix_export:
         - uuid: b1000003-0000-0000-0000-000000000001
           name: 'Docker Swarm Node Discovery'
           key: 'swarm.nodes.discovery'
+          type: ZABBIX_ACTIVE
           delay: 10m
           lifetime: 1d
           lifetime_type: DELETE_AFTER
@@ -200,6 +207,7 @@ zabbix_export:
             - uuid: c3000001-0000-0000-0000-000000000001
               name: 'Node {#NODE.HOSTNAME}: status'
               key: 'swarm.node.status[{#NODE.ID}]'
+              type: ZABBIX_ACTIVE
               delay: 60s
               value_type: TEXT
               description: 'JSON: hostname, role, availability, state, addr.'
@@ -251,6 +259,7 @@ zabbix_export:
         - uuid: b1000004-0000-0000-0000-000000000001
           name: 'Docker Swarm Replica Discovery'
           key: 'swarm.replicas.discovery'
+          type: ZABBIX_ACTIVE
           delay: 5m
           lifetime: 1d
           lifetime_type: DELETE_AFTER
@@ -262,6 +271,7 @@ zabbix_export:
             - uuid: c4000001-0000-0000-0000-000000000001
               name: 'Replica {#REPLICA.KEY}: stats'
               key: 'swarm.replica.stats[{#REPLICA.KEY}]'
+              type: ZABBIX_ACTIVE
               delay: 60s
               value_type: TEXT
               description: >

@@ -12,7 +12,7 @@ import (
 	"golang.zabbix.com/sdk/errs"
 )
 
-const dockerAPIVersion = "v1.41"
+const dockerAPIVersion = "v1.47"
 
 type client struct {
 	client http.Client
@@ -65,6 +65,36 @@ func (cli *client) Query(path string, filters map[string][]string) ([]byte, erro
 		var apiErr ErrorMessage
 		if err = json.Unmarshal(body, &apiErr); err != nil {
 			// If we can't parse the error, return the raw body.
+			return nil, errs.New(string(body))
+		}
+		return nil, errs.New(apiErr.Message)
+	}
+
+	return body, nil
+}
+
+func (cli *client) QueryContainerStats(containerID string) ([]byte, error) {
+	u := url.URL{
+		Scheme:   "http",
+		Host:     "localhost",
+		Path:     dockerAPIVersion + "/containers/" + containerID + "/stats",
+		RawQuery: "stream=false",
+	}
+
+	resp, err := cli.client.Get(u.String())
+	if err != nil {
+		return nil, errs.Wrap(err, "cannot fetch container stats")
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errs.Wrap(err, "cannot read container stats")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var apiErr ErrorMessage
+		if err = json.Unmarshal(body, &apiErr); err != nil {
 			return nil, errs.New(string(body))
 		}
 		return nil, errs.New(apiErr.Message)

@@ -1,31 +1,29 @@
 # Zabbix Agent 2 Docker Swarm Plugin
 
-A production-ready loadable plugin for Zabbix Agent 2 that provides comprehensive monitoring of Docker Swarm services.
+A production-ready loadable plugin for Zabbix Agent 2 that provides comprehensive monitoring of Docker Swarm services, nodes, and container resource usage.
 
 ## Overview
 
-The standard Docker plugin in Zabbix is inadequate for 
-Docker Swarm monitoring because containers get random suffixes 
-when restarted, creating new Zabbix items and breaking historical data continuity. 
-This plugin solves this by monitoring at the **service level** instead of container level, 
-providing stable service discovery and tracking desired vs running replica counts.
+The standard Docker plugin in Zabbix monitors at the container level, which breaks historical data continuity in Swarm because containers get new random IDs on every restart or redeploy. This plugin monitors at the **service level** instead, providing stable identifiers that survive restarts, rolling updates, and full stack redeploys.
 
 ## Features
 
-- **Service Discovery**: Low-Level Discovery (LLD) for all Docker Swarm services with stack grouping
-- **Stack Discovery**: Low-Level Discovery for Docker Compose stacks
-- **Replica Monitoring**: Track desired vs running replica counts per service
-- **Restart Detection**: Monitor and alert on service task restarts/crashes
-- **Stack Health Monitoring**: Aggregate health status by Docker Compose stack
-- **Stable Monitoring**: Service-based monitoring prevents historical data fragmentation
-- **Cross-Architecture**: Supports both x86_64 and ARM64 Linux systems
+- **Service Discovery**: LLD for all Docker Swarm services with stable `{#SERVICE.KEY}` identifiers
+- **Stack Discovery**: LLD for Docker Compose stacks grouped by `com.docker.stack.namespace`
+- **Replica Monitoring**: Desired vs running replica counts with placement constraint awareness
+- **Restart Detection**: Counts only genuinely failed (crashed) tasks — not rolling updates or scale-downs
+- **Stack Health**: Aggregate health percentage per stack with unevaluated-service tracking
+- **Node Monitoring**: LLD for all swarm nodes with availability, state and role per node
+- **Container Stats**: Per-replica CPU and memory metrics collected locally on each node
+- **Stable History**: Service- and slot-based identifiers mean Zabbix item history is never fragmented
+- **Cross-Architecture**: Supports x86_64 and ARM64 Linux
 
 ## Requirements
 
-- **Zabbix Agent 2**: Version 6.0 or later
+- **Zabbix Agent 2**: Version 6.0 or later (template requires 7.4 for embedded dashboard)
 - **Go**: Version 1.21+ (for building from source)
-- **Docker Swarm**: Linux environment with Docker Swarm mode enabled
-- **Permissions**: Zabbix user must have access to Docker socket
+- **Docker**: Swarm mode enabled, API version v1.47+
+- **Permissions**: Zabbix user must have read access to `/var/run/docker.sock`
 
 ## Installation
 
@@ -37,10 +35,10 @@ providing stable service discovery and tracking desired vs running replica count
 git clone <repository-url>
 cd zabbix-agent2-plugin-docker-swarm/src
 
-# For x86_64 Linux (most common)
+# For x86_64 Linux
 make build-x86_64
 
-# For ARM64 Linux 
+# For ARM64 Linux
 make build-arm64
 
 # Or build both
@@ -49,13 +47,11 @@ make build
 
 **Option B: Download pre-built binaries**
 
-Download the latest release from the 
-  [Releases](https://github.com/toontoet/zabbix-agent2-plugin-docker-swarm/releases) page.
+Download the latest release from the [Releases](https://github.com/toontoet/zabbix-agent2-plugin-docker-swarm/releases) page.
 
 ### 2. Install Plugin
 
 ```bash
-# Copy the binary to Zabbix plugins directory
 sudo cp docker-swarm-linux-x86_64 /var/lib/zabbix/plugins/docker-swarm
 sudo chmod +x /var/lib/zabbix/plugins/docker-swarm
 sudo chown zabbix:zabbix /var/lib/zabbix/plugins/docker-swarm
@@ -75,9 +71,8 @@ Plugins.DockerSwarm.System.Timeout=30
 ```bash
 # Add zabbix user to docker group
 sudo usermod -aG docker zabbix
-
-# Or set proper permissions on socket
-sudo chmod 666 /var/run/docker.sock
+# Or set permissions directly
+sudo chmod 660 /var/run/docker.sock
 ```
 
 ### 5. Restart Services
@@ -88,219 +83,228 @@ sudo systemctl restart zabbix-agent2
 
 ### 6. Verify Installation
 
-Test the plugin functionality:
-
 ```bash
 zabbix_get -s localhost -k "swarm.services.discovery"
 ```
+
+### 7. Import the Zabbix Template
+
+Import `zabbix_template_docker_swarm.yaml` from the repository root in Zabbix under
+**Configuration → Templates → Import**. The template targets Zabbix 7.4 and includes
+an embedded dashboard with three pages (Overview, Services, Resources).
+
+## Multi-Node Deployment
+
+**Node metrics and replica stats require the plugin on every swarm node.**
+
+- `swarm.nodes.discovery` and `swarm.node.status` only need to run on a manager node.
+- `swarm.replicas.discovery` and `swarm.replica.stats` each query the **local** Docker socket and only report replicas running on that specific node. Deploy the plugin on every node for full cluster resource visibility.
+
+Zabbix aggregates replica metrics across all nodes automatically via the LLD discovery rules — each node's agent contributes its local replica items to the same host or host group.
 
 ## Quick Start
 
-After installation, test the monitoring features:
-
 ```bash
-# Test service discovery with stack information
+# Service and stack discovery
 zabbix_get -s localhost -k "swarm.services.discovery"
-
-# Test stack discovery
 zabbix_get -s localhost -k "swarm.stacks.discovery"
 
-# Test stack health (replace 'mystack' with actual stack name)
+# Stack health
 zabbix_get -s localhost -k "swarm.stack.health[mystack]"
 
-# Test restart monitoring (use service name, ID, or service key)
-zabbix_get -s localhost -k "swarm.service.restarts[web]"
+# Service replica counts (use service name, ID, or service key)
+zabbix_get -s localhost -k "swarm.service.replicas_desired[mystack_web]"
+zabbix_get -s localhost -k "swarm.service.replicas_running[mystack_web]"
+
+# Failed task count and restart detection
 zabbix_get -s localhost -k "swarm.service.restarts[mystack_web]"
+zabbix_get -s localhost -k "swarm.service.last_restart[mystack_web]"
 
-# Debug: Check total task count to understand restart behavior
-zabbix_get -s localhost -k "swarm.service.tasks[web]"
+# Node discovery and status (run on manager)
+zabbix_get -s localhost -k "swarm.nodes.discovery"
+zabbix_get -s localhost -k "swarm.node.status[worker-01]"
 
-# Check last restart timestamp (for restart detection)
-zabbix_get -s localhost -k "swarm.service.last_restart[web]"
+# Replica discovery and stats (run on each node)
+zabbix_get -s localhost -k "swarm.replicas.discovery"
+zabbix_get -s localhost -k "swarm.replica.stats[mystack_web/slot/1]"
 ```
-
-For detailed examples and Zabbix template configuration, see [EXAMPLES.md](EXAMPLES.md).
 
 ## Supported Metrics
 
+### Service metrics
+
 | Key | Description | Returns |
 |-----|-------------|---------|
-| `swarm.services.discovery` | Service discovery for LLD | JSON array with `{#SERVICE.ID}`, `{#SERVICE.NAME}`, `{#STACK.NAME}`, and `{#SERVICE.KEY}` macros |
-| `swarm.service.replicas_desired[<service_identifier>]` | Configured replica count | Integer (desired replicas) |
-| `swarm.service.replicas_running[<service_identifier>]` | Running task count | Integer (running tasks) |
-| `swarm.service.restarts[<service_identifier>]` | Number of task restarts (crashed tasks) | Integer (restart count) |
-| `swarm.service.tasks[<service_identifier>]` | Total number of tasks for debugging | Integer (task count) |
-| `swarm.service.last_restart[<service_identifier>]` | Timestamp of most recent running task | Unix timestamp |
-| `swarm.stacks.discovery` | Stack discovery for LLD | JSON array with `{#STACK.NAME}` macro |
-| `swarm.stack.health[<stack_name>]` | Stack health status | JSON with health metrics |
+| `swarm.services.discovery` | LLD for all services | JSON array with `{#SERVICE.ID}`, `{#SERVICE.NAME}`, `{#STACK.NAME}`, `{#SERVICE.KEY}` |
+| `swarm.service.replicas_desired[<id>]` | Desired replica count | Integer |
+| `swarm.service.replicas_running[<id>]` | Running task count | Integer |
+| `swarm.service.restarts[<id>]` | Failed task count in recent history | Integer |
+| `swarm.service.tasks[<id>]` | Total task count (debug) | Integer |
+| `swarm.service.last_restart[<id>]` | Unix timestamp of most recent running task start | Integer (unixtime) |
 
-### Service Identifiers
+### Stack metrics
 
-Service metrics accept multiple identifier types for maximum flexibility:
+| Key | Description | Returns |
+|-----|-------------|---------|
+| `swarm.stacks.discovery` | LLD for all stacks | JSON array with `{#STACK.NAME}` |
+| `swarm.stack.health[<stack>]` | Stack health summary | JSON (see below) |
 
-- **Service ID**: Full Docker service ID (e.g., `abc123def456...`)
-- **Service Name**: Simple service name (e.g., `web`, `database`)
-- **Service Key**: Stable identifier for stack services (e.g., `mystack_web`, `mystack_database`)
+`swarm.stack.health` JSON fields:
 
-**Service Key Format:**
-- **Stack services**: `{stack_name}_{service_name}` (e.g., `mystack_web`)
-- **Standalone services**: `{service_name}` (e.g., `web`)
-
-**Benefits:**
-- ✅ **Stable monitoring**: Service keys don't change during stack redeploys
-- ✅ **Flexible identification**: Use any identifier type that's convenient
-- ✅ **Backward compatible**: Existing service ID usage continues to work
-
-### Restart Detection Methods
-
-The plugin provides multiple ways to detect service restarts:
-
-1. **Task Count Method** (`swarm.service.restarts`):
-   - Counts non-running tasks in recent history
-   - Limited by Docker's ~5 task retention policy
-   - Good for detecting recent restarts
-
-2. **Timestamp Method** (`swarm.service.last_restart`):
-   - Returns Unix timestamp of most recent running task
-   - Use in Zabbix with `change()` function to detect restarts
-   - More reliable for long-term monitoring
-
-**Recommended Zabbix Trigger:**
-```
-Expression: change(/YourHost/swarm.service.last_restart[{#SERVICE.KEY}])>0
-Description: Service {#SERVICE.NAME} has restarted
+```json
+{
+  "total_services": 5,
+  "evaluated_services": 5,
+  "healthy_services": 4,
+  "unhealthy_services": 1,
+  "unevaluated_services": 0,
+  "health_percentage": 80.0
+}
 ```
 
-## Zabbix Template Configuration
+### Node metrics
 
-### Service-Level Monitoring
+| Key | Description | Returns |
+|-----|-------------|---------|
+| `swarm.nodes.discovery` | LLD for all swarm nodes | JSON array with `{#NODE.ID}`, `{#NODE.HOSTNAME}`, `{#NODE.ROLE}` |
+| `swarm.node.status[<id_or_hostname>]` | Node status | JSON (see below) |
 
-#### Discovery Rule
+`swarm.node.status` JSON fields:
 
-- **Name**: Docker Swarm Services
-- **Key**: `swarm.services.discovery`
-- **Update Interval**: 300s (5 minutes)
+```json
+{
+  "hostname": "worker-01",
+  "role": "worker",
+  "availability": "active",
+  "state": "ready",
+  "addr": "192.168.1.10"
+}
+```
 
-#### Item Prototypes
+A healthy node has `availability: active` and `state: ready`.
 
-1. **Desired Replicas**
+### Replica metrics (per-node)
 
-   - **Name**: Service {#SERVICE.NAME} ({#STACK.NAME}) desired replicas
-   - **Key**: `swarm.service.replicas_desired[{#SERVICE.KEY}]`
-   - **Type**: Zabbix agent
+| Key | Description | Returns |
+|-----|-------------|---------|
+| `swarm.replicas.discovery` | LLD for replicas on this node | JSON array with `{#SERVICE.KEY}`, `{#SERVICE.NAME}`, `{#STACK.NAME}`, `{#REPLICA.KEY}`, `{#REPLICA.SLOT}` |
+| `swarm.replica.stats[<replica_key>]` | CPU and memory stats | JSON (see below) |
 
-2. **Running Replicas**
+`swarm.replica.stats` JSON fields:
 
-   - **Name**: Service {#SERVICE.NAME} ({#STACK.NAME}) running replicas
-   - **Key**: `swarm.service.replicas_running[{#SERVICE.KEY}]`
-   - **Type**: Zabbix agent
+```json
+{
+  "cpu_percent": 12.5,
+  "cpu_ns":      1234567890,
+  "mem_bytes":   67108864,
+  "mem_percent": 3.2,
+  "mem_limit":   2147483648
+}
+```
 
-3. **Restart Count**
+- `cpu_percent`: point-in-time CPU percentage (calculated from Docker's built-in pre/post sample pair)
+- `cpu_ns`: cumulative CPU nanoseconds — use Zabbix Delta storage type for rate
+- `mem_bytes`: working set memory (page cache subtracted), matches `docker stats` output
+- `mem_percent`: 0 when no memory limit is configured on the container
 
-   - **Name**: Service {#SERVICE.NAME} ({#STACK.NAME}) restart count
-   - **Key**: `swarm.service.restarts[{#SERVICE.KEY}]`
-   - **Type**: Zabbix agent
-   - **Store Value**: Delta (speed per second)
-   - **Note**: Use Delta to track increase in restarts over time
+Use `swarm.replica.stats` as a **master item** and create dependent items for each field using JSONPath preprocessing. This results in a single Docker API call per replica per interval.
 
-#### Trigger Prototypes
+### Replica key format
 
-1. **Replica Mismatch**
+Replica keys are stable across container restarts:
 
-   - **Name**: Service {#SERVICE.NAME} ({#STACK.NAME}) replica mismatch
-   - **Expression**: `last(/Template/swarm.service.replicas_running[{#SERVICE.KEY}])<>last(/Template/swarm.service.replicas_desired[{#SERVICE.KEY}])`
-   - **Severity**: Warning
+| Service mode | Key format | Example |
+|---|---|---|
+| Replicated | `{service_key}/slot/{N}` | `mystack_web/slot/1` |
+| Global | `{service_key}/node/{nodeID[:12]}` | `mystack_agent/node/a1b2c3d4ef12` |
 
-2. **Service Restarted**
+For replicated services the slot number never changes — when a container crashes and is replaced, the new task gets the same slot, so Zabbix item history remains continuous.
 
-   - **Name**: Service {#SERVICE.NAME} ({#STACK.NAME}) has restarted
-   - **Expression**: `change(/Template/swarm.service.restarts[{#SERVICE.KEY}])>0`
-   - **Severity**: Warning
-   - **Description**: A task for this service has crashed and been restarted
+### Service identifiers
 
-### Stack-Level Monitoring
+All service metrics accept:
 
-#### Discovery Rule
+- **Service ID** — full Docker service ID (`abc123def456...`)
+- **Service name** — plain name (`web`)
+- **Service key** — stable stack-prefixed name (`mystack_web`)
 
-- **Name**: Docker Compose Stacks
-- **Key**: `swarm.stacks.discovery`
-- **Update Interval**: 600s (10 minutes)
+## Desired Replica Calculation
 
-#### Item Prototypes
+The plugin calculates desired replicas correctly for all service configurations:
 
-1. **Stack Health**
+- **Replicated services**: uses the configured replica count, capped by `MaxReplicasPerNode × eligible_nodes` when `MaxReplicasPerNode` is set
+- **Global services**: counts only nodes that are `availability=active` and `state=ready` and satisfy the service's placement constraints
+- **Placement constraints** (`node.role`, `node.labels.*`, `engine.labels.*`, `node.platform.*`, etc.) are fully evaluated for both global and replicated services
 
-   - **Name**: Stack {#STACK.NAME} health status
-   - **Key**: `swarm.stack.health[{#STACK.NAME}]`
-   - **Type**: Zabbix agent
-   - **Value Type**: Text
+This prevents false replica-mismatch alerts when nodes are drained, paused, or constrained by placement rules.
 
-2. **Stack Health Percentage** (Calculated Item)
+## Restart Detection
 
-   - **Name**: Stack {#STACK.NAME} health percentage
-   - **Formula**: `jsonpath(last(/Template/swarm.stack.health[{#STACK.NAME}]),"$.health_percentage")`
-   - **Units**: %
+`swarm.service.restarts` counts only tasks with `state=failed` (container crashed). It deliberately excludes:
 
-3. **Unhealthy Services Count** (Calculated Item)
+- Tasks in transitional states (`preparing`, `starting`, `assigned`) — normal container lifecycle
+- Tasks intentionally stopped (`state=shutdown`) — rolling updates and scale-downs
 
-   - **Name**: Stack {#STACK.NAME} unhealthy services
-   - **Formula**: `jsonpath(last(/Template/swarm.stack.health[{#STACK.NAME}]),"$.unhealthy_services")`
+Because Docker retains only the last ~5 tasks per slot, this counter is **not cumulative** — do not use Delta storage type. Use `change()>0` in triggers instead:
 
-#### Trigger Prototypes
+```
+# Detect new task failures
+change(/YourHost/swarm.service.restarts[{#SERVICE.KEY}])>0
 
-1. **Stack Health Critical**
+# Detect any restart (more sensitive)
+change(/YourHost/swarm.service.last_restart[{#SERVICE.KEY}])>0
+```
 
-   - **Name**: Stack {#STACK.NAME} has unhealthy services
-   - **Expression**: `jsonpath(last(/Template/swarm.stack.health[{#STACK.NAME}]),"$.unhealthy_services")>0`
-   - **Severity**: High
+## Zabbix Template
 
-2. **Stack Health Warning**
+The included `zabbix_template_docker_swarm.yaml` (Zabbix 7.4+) provides:
 
-   - **Name**: Stack {#STACK.NAME} health below 100%
-   - **Expression**: `jsonpath(last(/Template/swarm.stack.health[{#STACK.NAME}]),"$.health_percentage")<100`
-   - **Severity**: Warning
+### Discovery rules
 
-## How It Works
+| Rule | Interval | Items | Graphs | Triggers |
+|---|---|---|---|---|
+| Service Discovery | 5m | desired replicas, running replicas, failed tasks, last restart | replicas, failed tasks | replica mismatch, task failure, restart |
+| Stack Discovery | 10m | health JSON, health %, unhealthy count | health % | unhealthy services, health < 100% |
+| Node Discovery | 10m | status JSON, availability, state | — | not ready, availability changed |
+| Replica Discovery | 5m | stats JSON, CPU %, CPU ns, mem bytes, mem %, mem limit | CPU %, memory | high CPU (>80% 5m avg), high memory (>90%) |
 
-### Service Discovery
+### Embedded dashboard (3 pages)
 
-The plugin discovers all Docker Swarm services and groups them by Docker 
-Compose stack using the `com.docker.stack.namespace` label. Services 
-without this label are marked as "standalone".
+| Page | Contents |
+|---|---|
+| Overview | Active problems, node status table, stack health table, service trigger overview grid |
+| Services | Replica count graphs (running vs desired), failed task graphs, stack health % graphs |
+| Resources | CPU % graphs per replica, memory graphs per replica (usage vs limit), resource alerts |
 
-### Stack Health Calculation
-
-For each stack, the plugin:
-
-1. Identifies all services belonging to the stack
-2. Compares desired vs running replica counts for each service
-3. Calculates health percentage: `(healthy_services / total_services) * 100`
-4. Returns comprehensive health metrics
-
-### Restart Detection
-
-The plugin tracks tasks that have failed or shutdown with non-zero exit codes, 
-indicating container crashes that triggered Docker Swarm restarts.
+The dashboard is a **template dashboard** — it is automatically scoped to each host the template is linked to, no manual widget configuration needed.
 
 ## Troubleshooting
 
-### Common Issues
+### Common issues
 
-1. **Permission Denied**: Ensure Zabbix user has access to Docker socket
-2. **No Services Found**: Verify Docker Swarm is running and services exist
-3. **Stack Not Detected**: Check that services have `com.docker.stack.namespace` labels
+| Symptom | Cause | Fix |
+|---|---|---|
+| Permission denied | Zabbix user cannot read Docker socket | `sudo usermod -aG docker zabbix` |
+| No services found | Swarm not running or no services | `docker service ls` |
+| Stack not detected | Missing `com.docker.stack.namespace` label | Deploy via `docker stack deploy` |
+| Replica stats empty | Plugin not running on worker node | Install plugin on all nodes |
+| Global service desired count wrong | Was counting all nodes including drained | Fixed — now counts only active+ready nodes matching placement constraints |
 
-### Debug Commands
+### Debug commands
 
 ```bash
-# Test Docker API access
-curl --unix-socket /var/run/docker.sock http://localhost/v1.41/services
+# Test Docker API directly
+curl --unix-socket /var/run/docker.sock http://localhost/v1.47/services | jq .
+curl --unix-socket /var/run/docker.sock http://localhost/v1.47/nodes | jq .
 
-# Check Zabbix Agent logs
+# Check Zabbix Agent 2 logs
 sudo tail -f /var/log/zabbix/zabbix_agent2.log
 
-# Test specific metrics
+# Test all metrics
 zabbix_get -s localhost -k "swarm.services.discovery"
+zabbix_get -s localhost -k "swarm.stacks.discovery"
+zabbix_get -s localhost -k "swarm.nodes.discovery"
+zabbix_get -s localhost -k "swarm.replicas.discovery"
 ```
 
 ## Contributing
@@ -313,7 +317,7 @@ zabbix_get -s localhost -k "swarm.services.discovery"
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 

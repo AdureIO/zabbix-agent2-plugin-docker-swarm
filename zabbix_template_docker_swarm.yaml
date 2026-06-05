@@ -323,7 +323,7 @@ zabbix_export:
       dashboards:
         - uuid: dash0001-0000-0000-0000-000000000001
           name: 'Docker Swarm Overview'
-          display_period: 30
+          display_period: '30'
           auto_start: 'YES'
           pages:
             - name: 'Overview'
@@ -331,19 +331,19 @@ zabbix_export:
 
                 - type: clock
                   name: ''
-                  x: 0
-                  y: 0
-                  width: 4
-                  height: 3
+                  x: '0'
+                  y: '0'
+                  width: '4'
+                  height: '3'
                   hide_header: 'YES'
                   fields: []
 
                 - type: problems
                   name: 'Active Problems'
-                  x: 4
-                  y: 0
-                  width: 20
-                  height: 6
+                  x: '4'
+                  y: '0'
+                  width: '20'
+                  height: '6'
                   fields:
                     - type: INTEGER
                       name: show
@@ -357,10 +357,10 @@ zabbix_export:
 
                 - type: plaintext
                   name: 'Node Statuses'
-                  x: 0
-                  y: 6
-                  width: 12
-                  height: 7
+                  x: '0'
+                  y: '6'
+                  width: '12'
+                  height: '7'
                   fields:
                     - type: ITEM_PROTOTYPE
                       name: 'itemids.0'
@@ -376,10 +376,10 @@ zabbix_export:
 
                 - type: plaintext
                   name: 'Stack Health'
-                  x: 12
-                  y: 6
-                  width: 12
-                  height: 7
+                  x: '12'
+                  y: '6'
+                  width: '12'
+                  height: '7'
                   fields:
                     - type: ITEM_PROTOTYPE
                       name: 'itemids.0'
@@ -395,10 +395,10 @@ zabbix_export:
 
                 - type: triggerover
                   name: 'Service Trigger Overview'
-                  x: 0
-                  y: 13
-                  width: 24
-                  height: 7
+                  x: '0'
+                  y: '13'
+                  width: '24'
+                  height: '7'
                   fields:
                     - type: INTEGER
                       name: show_triggers

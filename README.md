@@ -27,67 +27,96 @@ The standard Docker plugin in Zabbix monitors at the container level, which brea
 
 ## Installation
 
-### 1. Download or Build
-
-**Option A: Build from source**
+### One-line install (recommended)
 
 ```bash
-git clone <repository-url>
-cd zabbix-agent2-plugin-docker-swarm/src
-
-# For x86_64 Linux
-make build-x86_64
-
-# For ARM64 Linux
-make build-arm64
-
-# Or build both
-make build
+curl -fsSL https://raw.githubusercontent.com/toontoet/zabbix-agent2-plugin-docker-swarm/main/scripts/install.sh | sudo bash
 ```
 
-**Option B: Download pre-built binaries**
+The script auto-detects architecture (x86_64/arm64), downloads the latest release,
+verifies the SHA-256 checksum, writes the plugin config to
+`/etc/zabbix/zabbix_agent2.d/docker-swarm.conf`, adds the `zabbix` user to the
+`docker` group, and restarts `zabbix-agent2`.
 
-Download the latest release from the [Releases](https://github.com/toontoet/zabbix-agent2-plugin-docker-swarm/releases) page.
+**Install a specific version:**
+```bash
+curl -fsSL .../install.sh | sudo VERSION=v1.0.6 bash
+```
 
-### 2. Install Plugin
+**Dry run (preview actions without executing):**
+```bash
+curl -fsSL .../install.sh | sudo DRY_RUN=1 bash
+```
+
+**Uninstall:**
+```bash
+curl -fsSL .../install.sh | sudo UNINSTALL=1 bash
+```
+
+**Available environment variables:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `VERSION` | latest | Release tag to install (e.g. `v1.0.6`) |
+| `INSTALL_DIR` | `/var/lib/zabbix/plugins` | Directory for the plugin binary |
+| `CONF_DIR` | `/etc/zabbix/zabbix_agent2.d` | Directory for the plugin config file |
+| `SOCKET` | `/var/run/docker.sock` | Docker socket path |
+| `NO_RESTART` | `0` | Set to `1` to skip restarting zabbix-agent2 |
+| `DRY_RUN` | `0` | Set to `1` to preview actions without executing |
+| `UNINSTALL` | `0` | Set to `1` to remove the plugin |
+
+### Manual installation
+
+<details>
+<summary>Expand for manual steps</summary>
+
+**1. Download binary**
 
 ```bash
-sudo cp docker-swarm-linux-x86_64 /var/lib/zabbix/plugins/docker-swarm
-sudo chmod +x /var/lib/zabbix/plugins/docker-swarm
-sudo chown zabbix:zabbix /var/lib/zabbix/plugins/docker-swarm
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+VERSION=$(curl -sf https://api.github.com/repos/toontoet/zabbix-agent2-plugin-docker-swarm/releases/latest | grep tag_name | cut -d'"' -f4)
+curl -fsSL -o /tmp/docker-swarm \
+  "https://github.com/toontoet/zabbix-agent2-plugin-docker-swarm/releases/download/${VERSION}/docker-swarm-linux-${ARCH}"
 ```
 
-### 3. Configure Zabbix Agent 2
+**2. Install binary**
 
-Add to `/etc/zabbix/zabbix_agent2.conf`:
+```bash
+sudo install -m 755 -o root -g root /tmp/docker-swarm /var/lib/zabbix/plugins/docker-swarm
+```
 
-```ini
+**3. Write plugin config**
+
+```bash
+sudo tee /etc/zabbix/zabbix_agent2.d/docker-swarm.conf <<EOF
 Plugins.DockerSwarm.System.Path=/var/lib/zabbix/plugins/docker-swarm
 Plugins.DockerSwarm.System.Timeout=30
+EOF
 ```
 
-### 4. Configure Docker Socket Access
+**4. Grant Docker socket access**
 
 ```bash
-# Add zabbix user to docker group
 sudo usermod -aG docker zabbix
-# Or set permissions directly
-sudo chmod 660 /var/run/docker.sock
 ```
 
-### 5. Restart Services
+**5. Restart agent**
 
 ```bash
 sudo systemctl restart zabbix-agent2
 ```
 
-### 6. Verify Installation
+</details>
+
+**Build from source:**
 
 ```bash
-zabbix_get -s localhost -k "swarm.services.discovery"
+git clone https://github.com/toontoet/zabbix-agent2-plugin-docker-swarm.git
+cd zabbix-agent2-plugin-docker-swarm/src
+make build-x86_64   # or make build-arm64
 ```
 
-### 7. Import the Zabbix Template
+### Import the Zabbix Template
 
 Import `zabbix_template_docker_swarm.yaml` from the repository root in Zabbix under
 **Configuration → Templates → Import**. The template targets Zabbix 7.4 and includes

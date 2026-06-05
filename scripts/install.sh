@@ -88,7 +88,7 @@ detect_version() {
         echo "$VERSION"
         return
     fi
-    info "Fetching latest release version from GitHub..."
+    info "Fetching latest release version from GitHub..." >&2
     local tag
     tag=$(curl -sf "https://api.github.com/repos/${REPO}/releases/latest" \
         | grep '"tag_name"' | head -1 | cut -d'"' -f4)

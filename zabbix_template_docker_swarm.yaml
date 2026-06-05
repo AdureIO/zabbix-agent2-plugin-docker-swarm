@@ -323,8 +323,6 @@ zabbix_export:
       dashboards:
         - uuid: dash0001-0000-0000-0000-000000000001
           name: 'Docker Swarm Overview'
-          display_period: '30'
-          auto_start: 'YES'
           pages:
             - name: 'Overview'
               widgets:

@@ -101,9 +101,8 @@ detect_version() {
 }
 
 detect_agent_service() {
-    # Return the systemd unit name for zabbix-agent2
     for name in zabbix-agent2 zabbix_agent2; do
-        if systemctl list-units --full --all 2>/dev/null | grep -q "${name}.service"; then
+        if systemctl list-unit-files 2>/dev/null | grep -q "^${name}.service"; then
             echo "$name"
             return
         fi

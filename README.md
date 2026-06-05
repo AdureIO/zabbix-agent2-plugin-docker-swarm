@@ -30,7 +30,7 @@ The standard Docker plugin in Zabbix monitors at the container level, which brea
 ### One-line install (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/toontoet/zabbix-agent2-plugin-docker-swarm/main/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/AdureIO/zabbix-agent2-plugin-docker-swarm/main/scripts/install.sh | sudo bash
 ```
 
 The script auto-detects architecture (x86_64/arm64), downloads the latest release,
@@ -74,9 +74,9 @@ curl -fsSL .../install.sh | sudo UNINSTALL=1 bash
 
 ```bash
 ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-VERSION=$(curl -sf https://api.github.com/repos/toontoet/zabbix-agent2-plugin-docker-swarm/releases/latest | grep tag_name | cut -d'"' -f4)
+VERSION=$(curl -sf https://api.github.com/repos/AdureIO/zabbix-agent2-plugin-docker-swarm/releases/latest | grep tag_name | cut -d'"' -f4)
 curl -fsSL -o /tmp/docker-swarm \
-  "https://github.com/toontoet/zabbix-agent2-plugin-docker-swarm/releases/download/${VERSION}/docker-swarm-linux-${ARCH}"
+  "https://github.com/AdureIO/zabbix-agent2-plugin-docker-swarm/releases/download/${VERSION}/docker-swarm-linux-${ARCH}"
 ```
 
 **2. Install binary**
@@ -111,7 +111,7 @@ sudo systemctl restart zabbix-agent2
 **Build from source:**
 
 ```bash
-git clone https://github.com/toontoet/zabbix-agent2-plugin-docker-swarm.git
+git clone https://github.com/AdureIO/zabbix-agent2-plugin-docker-swarm.git
 cd zabbix-agent2-plugin-docker-swarm/src
 make build-x86_64   # or make build-arm64
 ```

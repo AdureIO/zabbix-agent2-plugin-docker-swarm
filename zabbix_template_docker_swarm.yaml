@@ -71,13 +71,13 @@ zabbix_export:
             - uuid: g1000001-0000-0000-0000-000000000001
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): replicas'
               graph_items:
-                - sortorder: 0
+                - sortorder: '0'
                   drawtype: BOLD_LINE
                   color: '00AA00'
                   item:
                     host: 'Docker Swarm'
                     key: 'swarm.service.replicas_running[{#SERVICE.KEY}]'
-                - sortorder: 1
+                - sortorder: '1'
                   drawtype: DASHED_LINE
                   color: 'FF5500'
                   item:
@@ -87,7 +87,7 @@ zabbix_export:
             - uuid: g1000002-0000-0000-0000-000000000001
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): failed tasks'
               graph_items:
-                - sortorder: 0
+                - sortorder: '0'
                   drawtype: FILLED_REGION
                   color: 'FF0000'
                   item:
@@ -172,7 +172,7 @@ zabbix_export:
             - uuid: g2000001-0000-0000-0000-000000000001
               name: 'Stack {#STACK.NAME}: health percentage'
               graph_items:
-                - sortorder: 0
+                - sortorder: '0'
                   drawtype: GRADIENT_LINE
                   color: '00AA00'
                   item:
@@ -347,7 +347,7 @@ zabbix_export:
             - uuid: g4000001-0000-0000-0000-000000000001
               name: 'Replica {#REPLICA.KEY}: CPU %'
               graph_items:
-                - sortorder: 0
+                - sortorder: '0'
                   drawtype: BOLD_LINE
                   color: '0080FF'
                   item:
@@ -358,13 +358,13 @@ zabbix_export:
               name: 'Replica {#REPLICA.KEY}: memory'
               ymax_type: FIXED
               graph_items:
-                - sortorder: 0
+                - sortorder: '0'
                   drawtype: GRADIENT_LINE
                   color: '8000FF'
                   item:
                     host: 'Docker Swarm'
                     key: 'swarm.replica.mem_bytes[{#REPLICA.KEY}]'
-                - sortorder: 1
+                - sortorder: '1'
                   drawtype: DASHED_LINE
                   color: 'FF0000'
                   item:

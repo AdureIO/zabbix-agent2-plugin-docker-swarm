@@ -2,7 +2,7 @@
 # install.sh — Install the Zabbix Agent 2 Docker Swarm plugin
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/toontoet/zabbix-agent2-plugin-docker-swarm/main/scripts/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/AdureIO/zabbix-agent2-plugin-docker-swarm/main/scripts/install.sh | sudo bash
 #
 # Options (environment variables):
 #   VERSION=v1.0.6          Install a specific version (default: latest)
@@ -18,7 +18,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Config (can be overridden by environment variables)
 # ---------------------------------------------------------------------------
-REPO="${REPO:-toontoet/zabbix-agent2-plugin-docker-swarm}"
+REPO="${REPO:-AdureIO/zabbix-agent2-plugin-docker-swarm}"
 INSTALL_DIR="${INSTALL_DIR:-/var/lib/zabbix/plugins}"
 CONF_DIR="${CONF_DIR:-/etc/zabbix/zabbix_agent2.d}"
 SOCKET="${SOCKET:-/var/run/docker.sock}"

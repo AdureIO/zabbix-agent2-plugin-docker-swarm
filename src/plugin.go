@@ -21,6 +21,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.zabbix.com/sdk/errs"
@@ -41,6 +43,10 @@ const (
 	serviceLastRestart     = swarmMetricKey("swarm.service.last_restart")
 	stackDiscoveryMetric   = swarmMetricKey("swarm.stacks.discovery")
 	stackHealthMetric      = swarmMetricKey("swarm.stack.health")
+	replicaDiscoveryMetric = swarmMetricKey("swarm.replicas.discovery")
+	replicaStatsMetric     = swarmMetricKey("swarm.replica.stats")
+	nodeDiscoveryMetric    = swarmMetricKey("swarm.nodes.discovery")
+	nodeStatusMetric       = swarmMetricKey("swarm.node.status")
 )
 
 var (
@@ -183,6 +189,38 @@ func (p *swarmPlugin) registerMetrics() error {
 				false,
 			),
 			handler: p.getStackHealth,
+		},
+		replicaDiscoveryMetric: {
+			metric: metric.New(
+				"Discover service replicas running on this node.",
+				nil,
+				false,
+			),
+			handler: p.discoverReplicas,
+		},
+		replicaStatsMetric: {
+			metric: metric.New(
+				"Returns CPU and memory stats for a replica running on this node.",
+				nil,
+				false,
+			),
+			handler: p.getReplicaStats,
+		},
+		nodeDiscoveryMetric: {
+			metric: metric.New(
+				"Discover all nodes in the swarm cluster.",
+				nil,
+				false,
+			),
+			handler: p.discoverNodes,
+		},
+		nodeStatusMetric: {
+			metric: metric.New(
+				"Returns availability, state and role for a swarm node.",
+				nil,
+				false,
+			),
+			handler: p.getNodeStatus,
 		},
 	}
 
@@ -332,32 +370,40 @@ func (p *swarmPlugin) getStackHealth(_ context.Context, params []string) (any, e
 
 	totalServices := len(stackServices)
 	healthyServices := 0
+	evaluatedServices := 0
 
-	// Check health of each service
 	for _, service := range stackServices {
 		desired, dErr := p.getServiceDesiredReplicas(service)
 		if dErr != nil {
-			continue // Skip services we can't evaluate
+			continue
 		}
 
 		running, rErr := p.getServiceRunningTasks(service.ID)
 		if rErr != nil {
-			continue // Skip services we can't evaluate
+			continue
 		}
+
+		evaluatedServices++
 
 		if running >= desired {
 			healthyServices++
 		}
 	}
 
-	unhealthyServices := totalServices - healthyServices
-	healthPercentage := float64(healthyServices) / float64(totalServices) * 100
+	if evaluatedServices == 0 {
+		return nil, errs.New("could not evaluate any services for stack: " + stackName)
+	}
+
+	unhealthyServices := evaluatedServices - healthyServices
+	healthPercentage := float64(healthyServices) / float64(evaluatedServices) * 100
 
 	result := map[string]interface{}{
-		"total_services":     totalServices,
-		"healthy_services":   healthyServices,
-		"unhealthy_services": unhealthyServices,
-		"health_percentage":  healthPercentage,
+		"total_services":       totalServices,
+		"evaluated_services":   evaluatedServices,
+		"healthy_services":     healthyServices,
+		"unhealthy_services":   unhealthyServices,
+		"unevaluated_services": totalServices - evaluatedServices,
+		"health_percentage":    healthPercentage,
 	}
 
 	jsonData, err := json.Marshal(result)
@@ -386,30 +432,67 @@ func (p *swarmPlugin) getDesiredReplicas(_ context.Context, params []string) (an
 
 func (p *swarmPlugin) getServiceDesiredReplicas(service Service) (int, error) {
 	if service.Spec.Mode.Replicated != nil && service.Spec.Mode.Replicated.Replicas != nil {
-		replicas := *service.Spec.Mode.Replicated.Replicas
-		// #nosec G115 - Docker Swarm replica counts are reasonable values, overflow extremely unlikely
-		return int(replicas), nil
+		// #nosec G115 — replica counts are small integers
+		configured := int(*service.Spec.Mode.Replicated.Replicas)
+		return p.getReplicatedServiceDesiredReplicas(service, configured)
 	}
 
 	if service.Spec.Mode.Global != nil {
-		return p.getTotalNodes()
+		return p.getGlobalServiceEligibleNodeCount(service)
 	}
 
 	return 0, errs.New("could not determine desired replicas for service " + service.ID)
 }
 
-func (p *swarmPlugin) getTotalNodes() (int, error) {
-	body, err := p.client.Query("nodes", nil)
+// getReplicatedServiceDesiredReplicas caps the configured replica count when
+// MaxReplicas is set and the placement constraints limit eligible nodes.
+func (p *swarmPlugin) getReplicatedServiceDesiredReplicas(service Service, configured int) (int, error) {
+	placement := service.Spec.TaskTemplate.Placement
+	if placement == nil || placement.MaxReplicas == 0 {
+		return configured, nil
+	}
+
+	nodes, err := p.getNodes()
 	if err != nil {
 		return 0, err
 	}
 
-	var nodes []Node
-	if err = json.Unmarshal(body, &nodes); err != nil {
-		return 0, errs.Wrap(err, "cannot unmarshal JSON")
+	eligible, err := countEligibleNodes(nodes, placement.Constraints)
+	if err != nil {
+		return 0, err
 	}
 
-	return len(nodes), nil
+	return effectiveReplicatedDesired(configured, eligible, placement.MaxReplicas), nil
+}
+
+// getGlobalServiceEligibleNodeCount returns the number of active+ready nodes
+// that satisfy the service's placement constraints.
+func (p *swarmPlugin) getGlobalServiceEligibleNodeCount(service Service) (int, error) {
+	nodes, err := p.getNodes()
+	if err != nil {
+		return 0, err
+	}
+
+	constraints := []string{}
+	if service.Spec.TaskTemplate.Placement != nil {
+		constraints = service.Spec.TaskTemplate.Placement.Constraints
+	}
+
+	return countEligibleNodes(nodes, constraints)
+}
+
+func (p *swarmPlugin) getNodes() ([]Node, error) {
+	body, err := p.client.Query("nodes", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var nodes []Node
+	if err = json.Unmarshal(body, &nodes); err != nil {
+		return nil, errs.Wrap(err, "cannot unmarshal JSON")
+	}
+
+	return nodes, nil
 }
 
 func (p *swarmPlugin) getRunningTasks(_ context.Context, params []string) (any, error) {
@@ -519,19 +602,11 @@ func (p *swarmPlugin) getServiceRestarts(_ context.Context, params []string) (an
 		return 0, errs.Wrap(err, "cannot unmarshal JSON")
 	}
 
-	// Count restarts by looking at task creation timestamps
-	// Since Docker Swarm only keeps ~5 recent tasks, we need a different approach
-	// We'll count tasks that are not currently running as restarts
-	// This gives us the restart count within the recent task history window
-
+	// Only count tasks that actually failed (container crashed).
+	// Excludes: shutdown (scale-down/rolling-update), preparing/starting (normal lifecycle).
 	restartCount := 0
-
-	// Count all tasks that are not currently running
-	// This includes failed, shutdown, and completed tasks
 	for _, task := range tasks {
-		// Count all tasks that are not currently running
-		// This includes all historical tasks (restarts)
-		if task.Status.State != "running" {
+		if task.Status.State == "failed" {
 			restartCount++
 		}
 	}
@@ -604,8 +679,8 @@ func (p *swarmPlugin) getServiceLastRestart(_ context.Context, params []string) 
 
 	for _, task := range tasks {
 		if task.Status.State == "running" && task.Status.Timestamp != "" {
-			// Parse the timestamp (Docker uses RFC3339 format)
-			if timestamp, err := time.Parse(time.RFC3339, task.Status.Timestamp); err == nil {
+			// Docker uses RFC3339Nano (nanosecond precision)
+			if timestamp, err := time.Parse(time.RFC3339Nano, task.Status.Timestamp); err == nil {
 				if timestamp.Unix() > mostRecentTimestamp {
 					mostRecentTimestamp = timestamp.Unix()
 				}
@@ -614,4 +689,377 @@ func (p *swarmPlugin) getServiceLastRestart(_ context.Context, params []string) 
 	}
 
 	return mostRecentTimestamp, nil
+}
+
+func (p *swarmPlugin) getLocalNodeID() (string, error) {
+	body, err := p.client.Query("info", nil)
+	if err != nil {
+		return "", err
+	}
+
+	var info DockerInfo
+	if err = json.Unmarshal(body, &info); err != nil {
+		return "", errs.Wrap(err, "cannot unmarshal JSON")
+	}
+
+	if info.Swarm.NodeID == "" {
+		return "", errs.New("node is not part of a swarm")
+	}
+
+	return info.Swarm.NodeID, nil
+}
+
+// replicaKey builds the stable identifier for a task.
+// Replicated services: "{serviceKey}/slot/{N}"
+// Global services:     "{serviceKey}/node/{nodeID[:12]}"
+func replicaKey(serviceKey string, task Task) string {
+	if task.Slot > 0 {
+		return serviceKey + "/slot/" + strconv.Itoa(task.Slot)
+	}
+
+	nodeShort := task.NodeID
+	if len(nodeShort) > 12 {
+		nodeShort = nodeShort[:12]
+	}
+
+	return serviceKey + "/node/" + nodeShort
+}
+
+func (p *swarmPlugin) discoverReplicas(_ context.Context, params []string) (any, error) {
+	if len(params) != 0 {
+		return nil, errs.New("expected no parameters for replica discovery")
+	}
+
+	localNodeID, err := p.getLocalNodeID()
+	if err != nil {
+		return nil, err
+	}
+
+	services, err := p.getServices()
+	if err != nil {
+		return nil, err
+	}
+
+	serviceMap := make(map[string]Service, len(services))
+	for _, s := range services {
+		serviceMap[s.ID] = s
+	}
+
+	filters := map[string][]string{
+		"node":          {localNodeID},
+		"desired-state": {"running"},
+	}
+
+	body, err := p.client.Query("tasks", filters)
+	if err != nil {
+		return nil, err
+	}
+
+	var tasks []Task
+	if err = json.Unmarshal(body, &tasks); err != nil {
+		return nil, errs.Wrap(err, "cannot unmarshal JSON")
+	}
+
+	type LLDReplica struct {
+		ServiceKey  string `json:"{#SERVICE.KEY}"`
+		ServiceName string `json:"{#SERVICE.NAME}"`
+		StackName   string `json:"{#STACK.NAME}"`
+		ReplicaKey  string `json:"{#REPLICA.KEY}"`
+		ReplicaSlot string `json:"{#REPLICA.SLOT}"`
+	}
+
+	lldReplicas := make([]LLDReplica, 0)
+
+	for _, task := range tasks {
+		if task.Status.State != "running" {
+			continue
+		}
+
+		// Only include tasks that already have a container ID — stats require it.
+		if task.Status.ContainerStatus == nil || task.Status.ContainerStatus.ContainerID == "" {
+			continue
+		}
+
+		svc, ok := serviceMap[task.ServiceID]
+		if !ok {
+			continue
+		}
+
+		stackName := "standalone"
+		if svc.Spec.Labels != nil {
+			if ns, exists := svc.Spec.Labels["com.docker.stack.namespace"]; exists {
+				stackName = ns
+			}
+		}
+
+		svcKey := svc.Spec.Name
+		if stackName != "standalone" {
+			svcKey = stackName + "_" + svc.Spec.Name
+		}
+
+		slot := strconv.Itoa(task.Slot)
+		if task.Slot == 0 {
+			slot = task.NodeID
+		}
+
+		lldReplicas = append(lldReplicas, LLDReplica{
+			ServiceKey:  svcKey,
+			ServiceName: svc.Spec.Name,
+			StackName:   stackName,
+			ReplicaKey:  replicaKey(svcKey, task),
+			ReplicaSlot: slot,
+		})
+	}
+
+	jsonData, err := json.Marshal(lldReplicas)
+	if err != nil {
+		return nil, errs.Wrap(err, "cannot marshal JSON")
+	}
+
+	return string(jsonData), nil
+}
+
+// findTaskByReplicaKey resolves a replica key to the running task on this node.
+func (p *swarmPlugin) findTaskByReplicaKey(key string) (*Task, error) {
+	localNodeID, err := p.getLocalNodeID()
+	if err != nil {
+		return nil, err
+	}
+
+	services, err := p.getServices()
+	if err != nil {
+		return nil, err
+	}
+
+	// Match the service key prefix and extract the slot/node suffix.
+	var targetServiceID string
+	var isSlot bool
+	var slot int
+	var nodePrefix string
+
+	for _, svc := range services {
+		stackName := "standalone"
+		if svc.Spec.Labels != nil {
+			if ns, exists := svc.Spec.Labels["com.docker.stack.namespace"]; exists {
+				stackName = ns
+			}
+		}
+
+		svcKey := svc.Spec.Name
+		if stackName != "standalone" {
+			svcKey = stackName + "_" + svc.Spec.Name
+		}
+
+		if suffix, ok := strings.CutPrefix(key, svcKey+"/slot/"); ok {
+			n, err := strconv.Atoi(suffix)
+			if err != nil {
+				return nil, errs.New("invalid slot in replica key: " + key)
+			}
+			targetServiceID = svc.ID
+			isSlot = true
+			slot = n
+			break
+		}
+
+		if suffix, ok := strings.CutPrefix(key, svcKey+"/node/"); ok {
+			targetServiceID = svc.ID
+			isSlot = false
+			nodePrefix = suffix
+			break
+		}
+	}
+
+	if targetServiceID == "" {
+		return nil, errs.New("service not found for replica key: " + key)
+	}
+
+	filters := map[string][]string{
+		"service":       {targetServiceID},
+		"node":          {localNodeID},
+		"desired-state": {"running"},
+	}
+
+	body, err := p.client.Query("tasks", filters)
+	if err != nil {
+		return nil, err
+	}
+
+	var tasks []Task
+	if err = json.Unmarshal(body, &tasks); err != nil {
+		return nil, errs.Wrap(err, "cannot unmarshal JSON")
+	}
+
+	for i, task := range tasks {
+		if task.Status.State != "running" {
+			continue
+		}
+
+		if isSlot && task.Slot == slot {
+			return &tasks[i], nil
+		}
+
+		if !isSlot && strings.HasPrefix(task.NodeID, nodePrefix) {
+			return &tasks[i], nil
+		}
+	}
+
+	return nil, errs.New("running replica not found on this node for key: " + key)
+}
+
+func (p *swarmPlugin) getReplicaStats(_ context.Context, params []string) (any, error) {
+	if len(params) != 1 {
+		return nil, errs.New("expected 1 parameter for replica stats")
+	}
+
+	task, err := p.findTaskByReplicaKey(params[0])
+	if err != nil {
+		return nil, err
+	}
+
+	if task.Status.ContainerStatus == nil || task.Status.ContainerStatus.ContainerID == "" {
+		return nil, errs.New("container not yet running for replica: " + params[0])
+	}
+
+	body, err := p.client.QueryContainerStats(task.Status.ContainerStatus.ContainerID)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw ContainerStats
+	if err = json.Unmarshal(body, &raw); err != nil {
+		return nil, errs.Wrap(err, "cannot unmarshal container stats")
+	}
+
+	stats := ReplicaStats{
+		CPUPercent: calcCPUPercent(&raw),
+		CPUNs:      raw.CPUStats.CPUUsage.TotalUsage,
+		MemBytes:   calcMemUsage(&raw),
+		MemPercent: calcMemPercent(&raw),
+		MemLimit:   raw.MemoryStats.Limit,
+	}
+
+	jsonData, err := json.Marshal(stats)
+	if err != nil {
+		return nil, errs.Wrap(err, "cannot marshal JSON")
+	}
+
+	return string(jsonData), nil
+}
+
+func calcCPUPercent(s *ContainerStats) float64 {
+	cpuDelta := float64(s.CPUStats.CPUUsage.TotalUsage) - float64(s.PreCPUStats.CPUUsage.TotalUsage)
+	sysDelta := float64(s.CPUStats.SystemCPUUsage) - float64(s.PreCPUStats.SystemCPUUsage)
+
+	if sysDelta <= 0 || cpuDelta < 0 {
+		return 0
+	}
+
+	numCPUs := s.CPUStats.OnlineCPUs
+	if numCPUs == 0 {
+		numCPUs = len(s.CPUStats.CPUUsage.PercpuUsage)
+	}
+
+	if numCPUs == 0 {
+		numCPUs = 1
+	}
+
+	return (cpuDelta / sysDelta) * float64(numCPUs) * 100.0
+}
+
+func calcMemUsage(s *ContainerStats) uint64 {
+	usage := s.MemoryStats.Usage
+
+	// Subtract page cache to get actual working set memory.
+	// Docker uses inactive_file on cgroups v1; cgroups v2 reports it the same way.
+	if v, ok := s.MemoryStats.Stats["inactive_file"]; ok && usage > v {
+		return usage - v
+	}
+
+	if v, ok := s.MemoryStats.Stats["cache"]; ok && usage > v {
+		return usage - v
+	}
+
+	return usage
+}
+
+func calcMemPercent(s *ContainerStats) float64 {
+	// A limit of 0 or near-maxuint64 means "no limit set".
+	if s.MemoryStats.Limit == 0 || s.MemoryStats.Limit > 1e18 {
+		return 0
+	}
+
+	return float64(calcMemUsage(s)) / float64(s.MemoryStats.Limit) * 100.0
+}
+
+func (p *swarmPlugin) discoverNodes(_ context.Context, params []string) (any, error) {
+	if len(params) != 0 {
+		return nil, errs.New("expected no parameters for node discovery")
+	}
+
+	nodes, err := p.getNodes()
+	if err != nil {
+		return nil, err
+	}
+
+	type LLDNode struct {
+		NodeID       string `json:"{#NODE.ID}"`
+		NodeHostname string `json:"{#NODE.HOSTNAME}"`
+		NodeRole     string `json:"{#NODE.ROLE}"`
+	}
+
+	lldNodes := make([]LLDNode, 0, len(nodes))
+	for _, n := range nodes {
+		lldNodes = append(lldNodes, LLDNode{
+			NodeID:       n.ID,
+			NodeHostname: n.Description.Hostname,
+			NodeRole:     strings.ToLower(n.Spec.Role),
+		})
+	}
+
+	jsonData, err := json.Marshal(lldNodes)
+	if err != nil {
+		return nil, errs.Wrap(err, "cannot marshal JSON")
+	}
+
+	return string(jsonData), nil
+}
+
+func (p *swarmPlugin) getNodeStatus(_ context.Context, params []string) (any, error) {
+	if len(params) != 1 {
+		return nil, errs.New("expected 1 parameter for node status")
+	}
+
+	identifier := params[0]
+
+	nodes, err := p.getNodes()
+	if err != nil {
+		return nil, err
+	}
+
+	var target *Node
+	for i, n := range nodes {
+		if n.ID == identifier || n.Description.Hostname == identifier {
+			target = &nodes[i]
+			break
+		}
+	}
+
+	if target == nil {
+		return nil, errs.New("node not found: " + identifier)
+	}
+
+	result := NodeStatusResult{
+		Hostname:     target.Description.Hostname,
+		Role:         strings.ToLower(target.Spec.Role),
+		Availability: strings.ToLower(target.Spec.Availability),
+		State:        strings.ToLower(target.Status.State),
+		Addr:         target.Status.Addr,
+	}
+
+	jsonData, err := json.Marshal(result)
+	if err != nil {
+		return nil, errs.Wrap(err, "cannot marshal JSON")
+	}
+
+	return string(jsonData), nil
 }

@@ -5,16 +5,12 @@ zabbix_export:
       template: 'Docker Swarm'
       name: 'Docker Swarm'
       description: |
-        Monitors Docker Swarm services, stacks, replicas and nodes.
-        Deploy zabbix-agent2-plugin-docker-swarm on every swarm node.
-        Replica-level CPU/memory stats are collected node-locally — full coverage
-        requires the agent on every node in the cluster.
+        Monitors Docker Swarm services, stacks, replicas and nodes via zabbix-agent2-plugin-docker-swarm.
+        Deploy the plugin on every swarm node for full replica stats coverage.
+        Items default to ZABBIX_ACTIVE. Change to ZABBIX_PASSIVE if your agents use passive checks.
       groups:
         - name: 'Templates/Applications'
 
-      # -----------------------------------------------------------------------
-      # DISCOVERY RULES
-      # -----------------------------------------------------------------------
       discovery_rules:
 
         # --- Services --------------------------------------------------------
@@ -25,7 +21,7 @@ zabbix_export:
           delay: 5m
           lifetime: 1d
           lifetime_type: DELETE_AFTER
-          description: 'Discovers all Swarm services. Provides stable {#SERVICE.KEY} identifiers that survive redeploys.'
+          description: 'Discovers all Swarm services with stable {#SERVICE.KEY} identifiers that survive redeploys.'
           item_prototypes:
             - uuid: c1000001-0000-0000-0000-000000000001
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): desired replicas'
@@ -35,7 +31,7 @@ zabbix_export:
               value_type: UNSIGNED
               description: >
                 Desired replica count. For global services this reflects eligible
-                nodes after placement constraints. MaxReplicasPerNode is also applied
+                nodes after placement constraints. MaxReplicasPerNode is applied
                 for replicated services.
 
             - uuid: c1000002-0000-0000-0000-000000000001
@@ -54,7 +50,7 @@ zabbix_export:
               description: >
                 Count of failed (crashed) tasks in Docker task history (~5 per slot).
                 Does not count intentional shutdowns or rolling-update replacements.
-                Use change()>0 to detect new failures — do NOT use Delta storage type.
+                Use change()>0 in triggers — do NOT use Delta storage type.
 
             - uuid: c1000004-0000-0000-0000-000000000001
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): last task start timestamp'
@@ -66,33 +62,6 @@ zabbix_export:
               description: >
                 Unix timestamp when the most recent running task started.
                 Use change()>0 to detect that the service restarted.
-
-          graph_prototypes:
-            - uuid: g1000001-0000-0000-0000-000000000001
-              name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): replicas'
-              graph_items:
-                - sortorder: '0'
-                  drawtype: BOLD_LINE
-                  color: '00AA00'
-                  item:
-                    host: 'Docker Swarm'
-                    key: 'swarm.service.replicas_running[{#SERVICE.KEY}]'
-                - sortorder: '1'
-                  drawtype: DASHED_LINE
-                  color: 'FF5500'
-                  item:
-                    host: 'Docker Swarm'
-                    key: 'swarm.service.replicas_desired[{#SERVICE.KEY}]'
-
-            - uuid: g1000002-0000-0000-0000-000000000001
-              name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): failed tasks'
-              graph_items:
-                - sortorder: '0'
-                  drawtype: FILLED_REGION
-                  color: 'FF0000'
-                  item:
-                    host: 'Docker Swarm'
-                    key: 'swarm.service.restarts[{#SERVICE.KEY}]'
 
           trigger_prototypes:
             - uuid: d1000001-0000-0000-0000-000000000001
@@ -167,17 +136,6 @@ zabbix_export:
                 - type: JSONPATH
                   parameters:
                     - '$.unhealthy_services'
-
-          graph_prototypes:
-            - uuid: g2000001-0000-0000-0000-000000000001
-              name: 'Stack {#STACK.NAME}: health percentage'
-              graph_items:
-                - sortorder: '0'
-                  drawtype: GRADIENT_LINE
-                  color: '00AA00'
-                  item:
-                    host: 'Docker Swarm'
-                    key: 'swarm.stack.health_pct[{#STACK.NAME}]'
 
           trigger_prototypes:
             - uuid: d2000001-0000-0000-0000-000000000001
@@ -343,34 +301,6 @@ zabbix_export:
                   parameters:
                     - '$.mem_limit'
 
-          graph_prototypes:
-            - uuid: g4000001-0000-0000-0000-000000000001
-              name: 'Replica {#REPLICA.KEY}: CPU %'
-              graph_items:
-                - sortorder: '0'
-                  drawtype: BOLD_LINE
-                  color: '0080FF'
-                  item:
-                    host: 'Docker Swarm'
-                    key: 'swarm.replica.cpu_pct[{#REPLICA.KEY}]'
-
-            - uuid: g4000002-0000-0000-0000-000000000001
-              name: 'Replica {#REPLICA.KEY}: memory'
-              ymax_type: FIXED
-              graph_items:
-                - sortorder: '0'
-                  drawtype: GRADIENT_LINE
-                  color: '8000FF'
-                  item:
-                    host: 'Docker Swarm'
-                    key: 'swarm.replica.mem_bytes[{#REPLICA.KEY}]'
-                - sortorder: '1'
-                  drawtype: DASHED_LINE
-                  color: 'FF0000'
-                  item:
-                    host: 'Docker Swarm'
-                    key: 'swarm.replica.mem_limit[{#REPLICA.KEY}]'
-
           trigger_prototypes:
             - uuid: d4000001-0000-0000-0000-000000000001
               name: 'Replica {#REPLICA.KEY}: high CPU usage'
@@ -390,20 +320,12 @@ zabbix_export:
               description: 'Memory usage exceeded 90% of container limit.'
               manual_close: 'YES'
 
-      # -----------------------------------------------------------------------
-      # TEMPLATE DASHBOARD  (Zabbix 6.4+)
-      # Applied per-host when the template is linked.
-      # -----------------------------------------------------------------------
       dashboards:
         - uuid: dash0001-0000-0000-0000-000000000001
           name: 'Docker Swarm Overview'
           display_period: 30
           auto_start: 'YES'
           pages:
-
-            # -----------------------------------------------------------------
-            # Page 1 — Cluster health at a glance
-            # -----------------------------------------------------------------
             - name: 'Overview'
               widgets:
 
@@ -433,7 +355,6 @@ zabbix_export:
                       name: tag_name_format
                       value: '1'
 
-                # Node state — one row per discovered node
                 - type: plaintext
                   name: 'Node Statuses'
                   x: 0
@@ -453,7 +374,6 @@ zabbix_export:
                       name: show_as_html
                       value: '0'
 
-                # Stack health — one row per discovered stack
                 - type: plaintext
                   name: 'Stack Health'
                   x: 12
@@ -473,7 +393,6 @@ zabbix_export:
                       name: show_as_html
                       value: '0'
 
-                # Trigger overview — service health grid
                 - type: triggerover
                   name: 'Service Trigger Overview'
                   x: 0
@@ -487,125 +406,3 @@ zabbix_export:
                     - type: INTEGER
                       name: layout
                       value: '1'
-
-            # -----------------------------------------------------------------
-            # Page 2 — Service replicas
-            # -----------------------------------------------------------------
-            - name: 'Services'
-              widgets:
-
-                - type: graphprototype
-                  name: 'Replica Counts'
-                  x: 0
-                  y: 0
-                  width: 24
-                  height: 7
-                  fields:
-                    - type: GRAPH_PROTOTYPE
-                      name: graphid
-                      value:
-                        host: 'Docker Swarm'
-                        name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): replicas'
-                    - type: INTEGER
-                      name: columns
-                      value: '3'
-                    - type: INTEGER
-                      name: rows
-                      value: '2'
-
-                - type: graphprototype
-                  name: 'Failed Tasks'
-                  x: 0
-                  y: 7
-                  width: 24
-                  height: 7
-                  fields:
-                    - type: GRAPH_PROTOTYPE
-                      name: graphid
-                      value:
-                        host: 'Docker Swarm'
-                        name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): failed tasks'
-                    - type: INTEGER
-                      name: columns
-                      value: '3'
-                    - type: INTEGER
-                      name: rows
-                      value: '2'
-
-                - type: graphprototype
-                  name: 'Stack Health %'
-                  x: 0
-                  y: 14
-                  width: 24
-                  height: 5
-                  fields:
-                    - type: GRAPH_PROTOTYPE
-                      name: graphid
-                      value:
-                        host: 'Docker Swarm'
-                        name: 'Stack {#STACK.NAME}: health percentage'
-                    - type: INTEGER
-                      name: columns
-                      value: '4'
-                    - type: INTEGER
-                      name: rows
-                      value: '1'
-
-            # -----------------------------------------------------------------
-            # Page 3 — Container resource usage
-            # -----------------------------------------------------------------
-            - name: 'Resources'
-              widgets:
-
-                - type: graphprototype
-                  name: 'CPU % per Replica'
-                  x: 0
-                  y: 0
-                  width: 24
-                  height: 7
-                  fields:
-                    - type: GRAPH_PROTOTYPE
-                      name: graphid
-                      value:
-                        host: 'Docker Swarm'
-                        name: 'Replica {#REPLICA.KEY}: CPU %'
-                    - type: INTEGER
-                      name: columns
-                      value: '3'
-                    - type: INTEGER
-                      name: rows
-                      value: '2'
-
-                - type: graphprototype
-                  name: 'Memory per Replica'
-                  x: 0
-                  y: 7
-                  width: 24
-                  height: 7
-                  fields:
-                    - type: GRAPH_PROTOTYPE
-                      name: graphid
-                      value:
-                        host: 'Docker Swarm'
-                        name: 'Replica {#REPLICA.KEY}: memory'
-                    - type: INTEGER
-                      name: columns
-                      value: '3'
-                    - type: INTEGER
-                      name: rows
-                      value: '2'
-
-                # Top memory consumers as a flat sorted list
-                - type: toptriggers
-                  name: 'Current Resource Alerts'
-                  x: 0
-                  y: 14
-                  width: 24
-                  height: 5
-                  fields:
-                    - type: INTEGER
-                      name: rows_per_page
-                      value: '10'
-                    - type: INTEGER
-                      name: show_triggers
-                      value: '2'

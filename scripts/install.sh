@@ -167,7 +167,7 @@ do_install() {
     # ---- Download binary ---------------------------------------------------
     step "Downloading binary"
     tmp_dir=$(mktemp -d)
-    trap 'rm -rf "$tmp_dir"' EXIT
+    trap 'rm -rf "${tmp_dir:-}"' EXIT
 
     info "Downloading ${binary_name}..."
     if ! run curl -fsSL -o "${tmp_dir}/${PLUGIN_NAME}" "$binary_url"; then

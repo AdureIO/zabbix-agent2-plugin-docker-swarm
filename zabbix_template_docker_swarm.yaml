@@ -1,7 +1,7 @@
 zabbix_export:
   version: '7.4'
   templates:
-    - uuid: a1b2c3d4e5f67890abcdef1234567890
+    - uuid: 07b4aabe4e0b47c8a5ae1f878a691ca2
       template: 'Docker Swarm'
       name: 'Docker Swarm'
       description: |
@@ -14,7 +14,7 @@ zabbix_export:
       discovery_rules:
 
         # --- Services --------------------------------------------------------
-        - uuid: b1000001000000000000000000000001
+        - uuid: 9b369f75ccb544f48618a40103f6e11e
           name: 'Docker Swarm Service Discovery'
           key: 'swarm.services.discovery'
           type: ZABBIX_ACTIVE
@@ -23,7 +23,7 @@ zabbix_export:
           lifetime_type: DELETE_AFTER
           description: 'Discovers all Swarm services with stable {#SERVICE.KEY} identifiers that survive redeploys.'
           item_prototypes:
-            - uuid: c1000001000000000000000000000001
+            - uuid: afb6130a88cd4e40842a05b5ffc09b38
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): desired replicas'
               key: 'swarm.service.replicas_desired[{#SERVICE.KEY}]'
               type: ZABBIX_ACTIVE
@@ -34,14 +34,14 @@ zabbix_export:
                 nodes after placement constraints. MaxReplicasPerNode is applied
                 for replicated services.
 
-            - uuid: c1000002000000000000000000000001
+            - uuid: 369ea3e0f50e44ed81f606ce0af875f1
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): running replicas'
               key: 'swarm.service.replicas_running[{#SERVICE.KEY}]'
               type: ZABBIX_ACTIVE
               delay: 60s
               value_type: UNSIGNED
 
-            - uuid: c1000003000000000000000000000001
+            - uuid: cba86556c4aa4cf7a3f05c9c6400b89f
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): failed task count'
               key: 'swarm.service.restarts[{#SERVICE.KEY}]'
               type: ZABBIX_ACTIVE
@@ -52,7 +52,7 @@ zabbix_export:
                 Does not count intentional shutdowns or rolling-update replacements.
                 Use change()>0 in triggers — do NOT use Delta storage type.
 
-            - uuid: c1000004000000000000000000000001
+            - uuid: 1120b8ff0dc6441f896f52e33c4575bd
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): last task start timestamp'
               key: 'swarm.service.last_restart[{#SERVICE.KEY}]'
               type: ZABBIX_ACTIVE
@@ -64,7 +64,7 @@ zabbix_export:
                 Use change()>0 to detect that the service restarted.
 
           trigger_prototypes:
-            - uuid: d1000001000000000000000000000001
+            - uuid: 95787bbe360a402bb104f006722e3092
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): replica mismatch'
               expression: >
                 last(/Docker Swarm/swarm.service.replicas_running[{#SERVICE.KEY}])
@@ -74,7 +74,7 @@ zabbix_export:
               description: 'Running replicas do not match the desired count.'
               manual_close: 'YES'
 
-            - uuid: d1000002000000000000000000000001
+            - uuid: 6cf3368e05ae482d832cda96d80a4bcc
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): task failure detected'
               expression: >
                 change(/Docker Swarm/swarm.service.restarts[{#SERVICE.KEY}])>0
@@ -84,7 +84,7 @@ zabbix_export:
                 Docker retains only the last ~5 tasks per slot.
               manual_close: 'YES'
 
-            - uuid: d1000003000000000000000000000001
+            - uuid: 9bbbcdf5720c41a397dcb6f4b330276c
               name: 'Service {#SERVICE.NAME} ({#STACK.NAME}): task restarted'
               expression: >
                 change(/Docker Swarm/swarm.service.last_restart[{#SERVICE.KEY}])>0
@@ -93,7 +93,7 @@ zabbix_export:
               manual_close: 'YES'
 
         # --- Stacks ----------------------------------------------------------
-        - uuid: b1000002000000000000000000000001
+        - uuid: df3b1c6e14b348a7b38fb057d0fbeddf
           name: 'Docker Compose Stack Discovery'
           key: 'swarm.stacks.discovery'
           type: ZABBIX_ACTIVE
@@ -102,7 +102,7 @@ zabbix_export:
           lifetime_type: DELETE_AFTER
           description: 'Discovers Docker Compose stacks grouped by com.docker.stack.namespace label.'
           item_prototypes:
-            - uuid: c2000001000000000000000000000001
+            - uuid: 3d08974f78eb41fba4ae45f5e9df7723
               name: 'Stack {#STACK.NAME}: health status'
               key: 'swarm.stack.health[{#STACK.NAME}]'
               type: ZABBIX_ACTIVE
@@ -112,7 +112,7 @@ zabbix_export:
                 JSON: total_services, evaluated_services, healthy_services,
                 unhealthy_services, unevaluated_services, health_percentage.
 
-            - uuid: c2000002000000000000000000000001
+            - uuid: b9646e210372469e911e933b50a86e5b
               name: 'Stack {#STACK.NAME}: health percentage'
               key: 'swarm.stack.health_pct[{#STACK.NAME}]'
               type: DEPENDENT
@@ -125,7 +125,7 @@ zabbix_export:
                   parameters:
                     - '$.health_percentage'
 
-            - uuid: c2000003000000000000000000000001
+            - uuid: 0f7c56cc8b5c4dbaa6cef3cb4b794740
               name: 'Stack {#STACK.NAME}: unhealthy services'
               key: 'swarm.stack.unhealthy[{#STACK.NAME}]'
               type: DEPENDENT
@@ -138,14 +138,14 @@ zabbix_export:
                     - '$.unhealthy_services'
 
           trigger_prototypes:
-            - uuid: d2000001000000000000000000000001
+            - uuid: eab6927c576440259bb2d2b009dd69cd
               name: 'Stack {#STACK.NAME}: unhealthy services detected'
               expression: >
                 last(/Docker Swarm/swarm.stack.unhealthy[{#STACK.NAME}])>0
               priority: HIGH
               manual_close: 'YES'
 
-            - uuid: d2000002000000000000000000000001
+            - uuid: f3b36003916a4c3d9f12ccbb28fc0c40
               name: 'Stack {#STACK.NAME}: health below 100%'
               expression: >
                 last(/Docker Swarm/swarm.stack.health_pct[{#STACK.NAME}])<100
@@ -153,7 +153,7 @@ zabbix_export:
               manual_close: 'YES'
 
         # --- Nodes -----------------------------------------------------------
-        - uuid: b1000003000000000000000000000001
+        - uuid: 40cdab619bd84a9da3ce27cd7032b7c3
           name: 'Docker Swarm Node Discovery'
           key: 'swarm.nodes.discovery'
           type: ZABBIX_ACTIVE
@@ -162,7 +162,7 @@ zabbix_export:
           lifetime_type: DELETE_AFTER
           description: 'Discovers all nodes in the swarm. Run against any manager node.'
           item_prototypes:
-            - uuid: c3000001000000000000000000000001
+            - uuid: 7382c757e39c4f64b92ff3e42e74a15c
               name: 'Node {#NODE.HOSTNAME}: status'
               key: 'swarm.node.status[{#NODE.ID}]'
               type: ZABBIX_ACTIVE
@@ -170,7 +170,7 @@ zabbix_export:
               value_type: TEXT
               description: 'JSON: hostname, role, availability, state, addr.'
 
-            - uuid: c3000002000000000000000000000001
+            - uuid: 909c3f25440048b78523eb88e6faf375
               name: 'Node {#NODE.HOSTNAME}: availability'
               key: 'swarm.node.availability[{#NODE.ID}]'
               type: DEPENDENT
@@ -182,7 +182,7 @@ zabbix_export:
                   parameters:
                     - '$.availability'
 
-            - uuid: c3000003000000000000000000000001
+            - uuid: bc83a1fb5b0442deb3642dd187831a19
               name: 'Node {#NODE.HOSTNAME}: state'
               key: 'swarm.node.state[{#NODE.ID}]'
               type: DEPENDENT
@@ -195,7 +195,7 @@ zabbix_export:
                     - '$.state'
 
           trigger_prototypes:
-            - uuid: d3000001000000000000000000000001
+            - uuid: ca9178f3bc404a71b01b7c07276fcc20
               name: 'Node {#NODE.HOSTNAME}: not ready'
               expression: >
                 last(/Docker Swarm/swarm.node.state[{#NODE.ID}])<>"ready"
@@ -203,7 +203,7 @@ zabbix_export:
               description: 'Node is not in ready state (may be down or disconnected).'
               manual_close: 'YES'
 
-            - uuid: d3000002000000000000000000000001
+            - uuid: 8f6fca7f15a54585a4540790575dbc8e
               name: 'Node {#NODE.HOSTNAME}: availability changed from active'
               expression: >
                 change(/Docker Swarm/swarm.node.availability[{#NODE.ID}])=1
@@ -214,7 +214,7 @@ zabbix_export:
               manual_close: 'YES'
 
         # --- Replicas (per-node) ---------------------------------------------
-        - uuid: b1000004000000000000000000000001
+        - uuid: 6d1a5171865a4100b4c219bbd0791f69
           name: 'Docker Swarm Replica Discovery'
           key: 'swarm.replicas.discovery'
           type: ZABBIX_ACTIVE
@@ -226,7 +226,7 @@ zabbix_export:
             Deploy the agent on every swarm node for full cluster coverage.
             Replica keys use stable slot numbers — history survives container restarts.
           item_prototypes:
-            - uuid: c4000001000000000000000000000001
+            - uuid: 924b36658ebb446c8dd6748539444000
               name: 'Replica {#REPLICA.KEY}: stats'
               key: 'swarm.replica.stats[{#REPLICA.KEY}]'
               type: ZABBIX_ACTIVE
@@ -236,7 +236,7 @@ zabbix_export:
                 Master item. JSON: cpu_percent, cpu_ns, mem_bytes, mem_percent, mem_limit.
                 All other replica items are dependent on this one.
 
-            - uuid: c4000002000000000000000000000001
+            - uuid: b8e792e9ea994a06bdb0022133536c50
               name: 'Replica {#REPLICA.KEY}: CPU %'
               key: 'swarm.replica.cpu_pct[{#REPLICA.KEY}]'
               type: DEPENDENT
@@ -249,7 +249,7 @@ zabbix_export:
                   parameters:
                     - '$.cpu_percent'
 
-            - uuid: c4000003000000000000000000000001
+            - uuid: 061febf374f847fb867c6f93fab1b670
               name: 'Replica {#REPLICA.KEY}: CPU nanoseconds (cumulative)'
               key: 'swarm.replica.cpu_ns[{#REPLICA.KEY}]'
               type: DEPENDENT
@@ -262,7 +262,7 @@ zabbix_export:
                   parameters:
                     - '$.cpu_ns'
 
-            - uuid: c4000004000000000000000000000001
+            - uuid: 4c6700539cc248f6b13848932b808649
               name: 'Replica {#REPLICA.KEY}: memory (working set)'
               key: 'swarm.replica.mem_bytes[{#REPLICA.KEY}]'
               type: DEPENDENT
@@ -275,7 +275,7 @@ zabbix_export:
                   parameters:
                     - '$.mem_bytes'
 
-            - uuid: c4000005000000000000000000000001
+            - uuid: 652b63a1c2164bbab9cb5e3f37d16528
               name: 'Replica {#REPLICA.KEY}: memory %'
               key: 'swarm.replica.mem_pct[{#REPLICA.KEY}]'
               type: DEPENDENT
@@ -288,7 +288,7 @@ zabbix_export:
                   parameters:
                     - '$.mem_percent'
 
-            - uuid: c4000006000000000000000000000001
+            - uuid: 52b771f4ce1e48e8b051e5a7584d07ae
               name: 'Replica {#REPLICA.KEY}: memory limit'
               key: 'swarm.replica.mem_limit[{#REPLICA.KEY}]'
               type: DEPENDENT
@@ -302,7 +302,7 @@ zabbix_export:
                     - '$.mem_limit'
 
           trigger_prototypes:
-            - uuid: d4000001000000000000000000000001
+            - uuid: 9c42ec0264914816894513768595ab47
               name: 'Replica {#REPLICA.KEY}: high CPU usage'
               expression: >
                 avg(/Docker Swarm/swarm.replica.cpu_pct[{#REPLICA.KEY}],5m)>80
@@ -310,7 +310,7 @@ zabbix_export:
               description: 'Average CPU exceeded 80% for 5 minutes.'
               manual_close: 'YES'
 
-            - uuid: d4000002000000000000000000000001
+            - uuid: a0ead6017ae34e9691fbe5577edb59a5
               name: 'Replica {#REPLICA.KEY}: high memory usage'
               expression: >
                 last(/Docker Swarm/swarm.replica.mem_pct[{#REPLICA.KEY}])>90
